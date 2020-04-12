@@ -45,11 +45,11 @@
                 </div>
                 <div class="col-sm-4">
                     <button type="button" class="btn btn-light btn-sm" id="prev">&lt;</button>
-                    <span id="date">2020_04_04</span>
+                    <span id="date"></span>
                     <button type="button" class="btn btn-light btn-sm" id="next">&gt;</button>                
                 </div>
                 <div class="col-sm">
-                  The map is generated from <a href="https://signate.jp/competitions/260">COVID-19 Challenge (Phase 1)</a> data.
+                  <a href="https://docs.google.com/document/d/1vBobVKpIzh_eHQ3D0OHaQynQsqkbwk41TLxfN8tlT9g/edit?usp=sharing">このサイトについて</a>
                 </div>
               </div>
             </div>
@@ -63,7 +63,7 @@
         var datelist = [];
         var current_date;
         var polylines = [];
-        var labels = [];
+        var markers = [];
 
         function initMap() {
           map = new google.maps.Map(document.getElementById('map'), {
@@ -90,11 +90,13 @@
             var textMsg = document.getElementById('date');
             textMsg.textContent = current_date
 
-            //ノードを描画する
-            map.data.addGeoJson(daily_data.geodata);
+            //件数が2以上のものだけ表示する
+            draw_clusters(daily_data);
 
-            //ラベルを描画する
-            //draw_labels(daily_data.geodata);
+            //クラスタでないものはマーカーとして表示する
+            draw_single_cases(daily_data.geodata.features.filter(function(item, index){
+              if (item.properties.patients == 1) return true;
+            }));
 
             //エッジを描画する
             draw_edges(daily_data.edges);
@@ -147,25 +149,6 @@
             strokeWeight: .5
           };
         }
-
-        function draw_labels(geodata){
-          for(var i=0;i<geodata.features.length-1;i++){
-            feature = geodata.features[i];
-            var label = new google.maps.Marker({
-              position: {lat: feature.geometry.coordinates[1], lng: feature.geometry.coordinates[0]},
-              label: feature.properties.patients, 
-              map:map
-            });
-            labels.push(label);
-          }
-        }
-
-        function clear_labels(){
-          for(var i=0;i<labels.length;i++){
-            labels[i].setMap(null);
-          }
-          labels.length = 0;          
-        }
   
         function change_date(date){
           daily_data = data[date]
@@ -178,11 +161,20 @@
           map.data.forEach(feature => {
             map.data.remove(feature);
           });
-          map.data.addGeoJson(daily_data.geodata);
-          //ラベルを表示し直す
-          //clear_labels();
-          //draw_labels(daily_data.geodata);
-          
+
+          //件数が2以上のものだけ表示する
+          draw_clusters(daily_data);
+
+          //マーカーを削除
+          markers.forEach(marker => {
+            marker.setMap(null);
+          });
+          markers.length = 0;
+
+          //クラスタでないものはマーカーとして表示する
+          draw_single_cases(daily_data.geodata.features.filter(function(item, index){
+            if (item.properties.patients == 1) return true;
+          }));
 
           //エッジを全部消す
           for (var i = 0; i < polylines.length; i++){
@@ -192,6 +184,27 @@
           //エッジを描画する
           draw_edges(daily_data.edges);
 
+        }
+
+        function draw_single_cases(cases){
+          for(var c in cases){
+            var marker = new google.maps.Marker({
+              map: map,
+              position: new google.maps.LatLng(cases[c].geometry.coordinates[1],cases[c].geometry.coordinates[0]),
+              icon: {
+                url: 'imgs/single_case.png',
+                scaledSize: new google.maps.Size(10,10)
+              }
+            });
+            markers.push(marker);
+          }
+        }
+
+        function draw_clusters(daily_data){
+          var cluster_features = daily_data.geodata.features.filter(function(item, index){
+            if (item.properties.patients > 1) return true;
+          });
+          map.data.addGeoJson({features: cluster_features, type: "FeatureCollection"})
         }
 
         function draw_edges(edges){
@@ -209,9 +222,9 @@
                 icons: [{
                   icon: lineSymbol,
                   offset: '100%'
-                },
-                strokeWeight:10
-              ]
+                }],
+                strokeWeight: 1.5,
+                strokeOpacity: 0.4
               });
               polyline.setMap(map);
               polylines.push(polyline);
