@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <title>COVID-19 Cluster Transition Map </title>
+
+    <!-- update the version number as needed -->
+    <script defer src="/__/firebase/7.13.2/firebase-app.js"></script>
+    <!-- include only the Firebase features as you need -->
+    <script defer src="/__/firebase/7.13.2/firebase-auth.js"></script>
+    <script defer src="/__/firebase/7.13.2/firebase-database.js"></script>
+    <script defer src="/__/firebase/7.13.2/firebase-messaging.js"></script>
+    <script defer src="/__/firebase/7.13.2/firebase-storage.js"></script>
+    <!-- initialize the SDK after all desired features are loaded -->
+    <script defer src="/__/firebase/init.js"></script>
+    <style>
+            /* Always set the map height explicitly to define the size of the div
+             * element that contains the map. */
+            #map {
+              height: 97%;
+            }
+            #menu {
+              height: 3%;
+            }
+            /* Optional: Makes the sample page fill the window. */
+            html, body {
+              height: 100%;
+              margin: 0;
+              padding: 0;
+            }
+            .selector-for-some-widget {
+               box-sizing: content-box;
+            }
+    </style>
+      
+  </head>
+  <body>
+      <div id="menu">
+          <div class="container-fluid">
+              <div class="row" style="align-content: center;">
+                <div class="col-sm-4">
+                  <div>COVID-19 Cluster Transition Map</div>
+                </div>
+                <div class="col-sm-4">
+                    <button type="button" class="btn btn-light btn-sm" id="prev">&lt;</button>
+                    <span id="date">2020_04_04</span>
+                    <button type="button" class="btn btn-light btn-sm" id="next">&gt;</button>                
+                </div>
+                <div class="col-sm">
+                  The map is generated from <a href="https://signate.jp/competitions/260">COVID-19 Challenge (Phase 1)</a> data.
+                </div>
+              </div>
+            </div>
+          </div>
+      </div>      
+      <div id="map"></div>
+      <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+      <script>
+        var map;
+        var data;
+        var datelist = [];
+        var current_date;
+        var polylines = [];
+        var labels = [];
+
+        function initMap() {
+          map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 9,
+            center: {lat: 36.084853, lng: 139.731354},
+            mapTypeId: 'terrain'
+          });
+  
+          // Create a <script> tag and set the USGS URL as the source.
+          // var script = document.createElement('script');
+          // This example uses a local copy of the GeoJSON stored at
+          // http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojsonp
+          // script.src = 'result_geojsonp.js';
+          // document.getElementsByTagName('head')[0].appendChild(script);
+
+          var database = firebase.database();
+          return database.ref('transition').once('value').then(function(snapshot) {
+            data = snapshot.val();
+            datelist = Object.keys(data)
+            current_date = datelist[0]
+            daily_data = data[current_date]
+
+            //日付表示を変更する
+            var textMsg = document.getElementById('date');
+            textMsg.textContent = current_date
+
+            //ノードを描画する
+            map.data.addGeoJson(daily_data.geodata);
+
+            //ラベルを描画する
+            //draw_labels(daily_data.geodata);
+
+            //エッジを描画する
+            draw_edges(daily_data.edges);
+
+
+            map.data.setStyle(function(feature) {
+              var patients = feature.getProperty('patients');
+              return {
+                icon: getCircle(patients)
+              };
+            });
+          });  
+
+        }
+  
+        document.getElementById("next").onclick = function(){
+          move_neighbour_day(1);
+        }
+
+        document.getElementById("prev").onclick = function(){
+          move_neighbour_day(-1);
+        }
+
+        document.addEventListener('keydown', (event) => {
+          switch(event.keyCode){
+            case 39:
+              move_neighbour_day(1);
+              break;
+            case 37:
+              move_neighbour_day(-1);
+              break;
+          }
+        });        
+      
+        function move_neighbour_day(diff){
+          current_date = document.getElementById("date").innerText;
+          idx = datelist.indexOf(current_date); 
+          if((diff>0 && idx<datelist.length-diff) || (diff<0 && idx>0)){
+            change_date(datelist[idx+diff]);
+          }
+        }
+
+        function getCircle(patients) {
+          return {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: 'red',
+            fillOpacity: .2,
+            scale: Math.log2(patients+1)*10,
+            strokeColor: 'white',
+            strokeWeight: .5
+          };
+        }
+
+        function draw_labels(geodata){
+          for(var i=0;i<geodata.features.length-1;i++){
+            feature = geodata.features[i];
+            var label = new google.maps.Marker({
+              position: {lat: feature.geometry.coordinates[1], lng: feature.geometry.coordinates[0]},
+              label: feature.properties.patients, 
+              map:map
+            });
+            labels.push(label);
+          }
+        }
+
+        function clear_labels(){
+          for(var i=0;i<labels.length;i++){
+            labels[i].setMap(null);
+          }
+          labels.length = 0;          
+        }
+  
+        function change_date(date){
+          daily_data = data[date]
+
+          //日付表示を変更する
+          var textMsg = document.getElementById('date');
+          
+          textMsg.textContent = date
+          //map.dataをそっくり入れ替える
+          map.data.forEach(feature => {
+            map.data.remove(feature);
+          });
+          map.data.addGeoJson(daily_data.geodata);
+          //ラベルを表示し直す
+          //clear_labels();
+          //draw_labels(daily_data.geodata);
+          
+
+          //エッジを全部消す
+          for (var i = 0; i < polylines.length; i++){
+            polylines[i].setMap(null);
+          }
+          polylines.length = 0;
+          //エッジを描画する
+          draw_edges(daily_data.edges);
+
+        }
+
+        function draw_edges(edges){
+
+          var lineSymbol = {
+              path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW
+            };
+
+          for(i in edges){
+              var polyline = new google.maps.Polyline({
+                path:[
+                  {lat: edges[i].coordinates[0][1],lng: edges[i].coordinates[0][0]},
+                  {lat: edges[i].coordinates[1][1],lng: edges[i].coordinates[1][0]},
+                ],
+                icons: [{
+                  icon: lineSymbol,
+                  offset: '100%'
+                },
+                strokeWeight:10
+              ]
+              });
+              polyline.setMap(map);
+              polylines.push(polyline);
+            }
+        }
+
+        // function eqfeed_callback(results) {
+        //   map.data.addGeoJson(results);
+        // }
+      </script>
+      <script async defer
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBakJ_trQjI6yrz7mKJlnCSeQPSmhSzuXg&callback=initMap">
+      </script>
+  
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+        // // The Firebase SDK is initialized and available here!
+        //
+        // firebase.auth().onAuthStateChanged(user => { });
+        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
+        // firebase.messaging().requestPermission().then(() => { });
+        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
+        //
+        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+
+        try {
+          let app = firebase.app();
+          let features = ['auth', 'database', 'messaging', 'storage'].filter(feature => typeof app[feature] === 'function');
+          document.getElementById('load').innerHTML = `Firebase SDK loaded with ${features.join(', ')}`;
+        } catch (e) {
+          console.error(e);
+          document.getElementById('load').innerHTML = 'Error loading the Firebase SDK, check the console.';
+        }
+      });
+    </script>
+
+    <!-- The core Firebase JS SDK is always required and must be listed first -->
+    <script src="/__/firebase/7.13.2/firebase-app.js"></script>
+
+    <!-- TODO: Add SDKs for Firebase products that you want to use
+     https://firebase.google.com/docs/web/setup#available-libraries -->
+    <script src="/__/firebase/7.13.2/firebase-analytics.js"></script>
+
+    <!-- Initialize Firebase -->
+    <script src="/__/firebase/init.js"></script>
+    <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+
+
+  </body>
+</html>
