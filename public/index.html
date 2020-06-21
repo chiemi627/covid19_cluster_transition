@@ -69,7 +69,8 @@
           map = new google.maps.Map(document.getElementById('map'), {
             zoom: 9,
             center: {lat: 36.084853, lng: 139.731354},
-            mapTypeId: 'terrain'
+            mapTypeId: 'terrain',
+            maxZoom:13
           });
   
           // Create a <script> tag and set the USGS URL as the source.
@@ -94,9 +95,11 @@
             draw_clusters(daily_data);
 
             //クラスタでないものはマーカーとして表示する
-            draw_single_cases(daily_data.geodata.features.filter(function(item, index){
+            draw_single_cases(daily_data.geodata.features.filter(
+              function(item, index){
               if (item.properties.patients == 1) return true;
-            }));
+              }
+            ));
 
             //エッジを描画する
             draw_edges(daily_data.edges);
@@ -144,7 +147,7 @@
             path: google.maps.SymbolPath.CIRCLE,
             fillColor: 'red',
             fillOpacity: .2,
-            scale: Math.log2(patients+1)*10,
+            scale: Math.log2(patients)*10,
             strokeColor: 'white',
             strokeWeight: .5
           };
